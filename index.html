@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Entity Name Matcher</title>
+<style>
+:root{
+  --bg:#EEF2EF; --ink:#142019; --muted:#5B665F; --faint:#666E68;
+  --border:#DCE3DD; --border-strong:#C3CDC5; --card:#FFFFFF; --field:#EEF2EF;
+  --accent:#2F6F4E; --accent-hover:#26593F; --accent-active:#1F4A34; --link:#2A5C8A;
+  --danger:#A5311F; --warning:#9B600A; --warning-bg:#FBF0DE; --success:#26593F; --success-bg:#E3EFE8;
+  --radius:12px; --radius-sm:8px;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+*{box-sizing:border-box;}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.5;-webkit-font-smoothing:antialiased;}
+.wrap{max-width:840px;margin:0 auto;padding:40px 20px 64px;}
+h1{font-size:24px;font-weight:700;margin:0 0 8px;letter-spacing:-.01em;color:var(--ink);}
+p.lede{font-size:14px;color:var(--muted);margin:0 0 28px;max-width:64ch;}
+h2.section{font-size:15px;font-weight:700;margin:28px 0 12px;color:var(--ink);}
+h2.section:first-of-type{margin-top:0;}
+p.section-note{font-size:13px;color:var(--muted);margin:-8px 0 12px;}
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin-bottom:20px;}
+
+.table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--border);border-radius:var(--radius);}
+table{width:100%;border-collapse:collapse;font-size:13.5px;}
+.table-wrap table{border:none;}
+th,td{text-align:left;padding:10px 14px;border-bottom:1px solid var(--border);white-space:nowrap;}
+tbody tr:last-child td{border-bottom:none;}
+th{color:var(--muted);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.03em;background:#F2F5F2;}
+.empty-state{padding:22px;text-align:center;color:var(--muted);font-size:13.5px;}
+
+.flag-card{background:var(--field);border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px 16px;margin-bottom:10px;}
+.flag-card:last-child{margin-bottom:0;}
+.flag-card.high{border-color:var(--danger);}
+.flag-title{font-weight:700;color:var(--ink);}
+.flag-score{color:var(--muted);font-size:0.85em;margin-left:6px;}
+.flag-reasons{margin:8px 0 0;padding-left:18px;font-size:0.9em;color:var(--muted);}
+.flag-reasons li{margin-bottom:3px;}
+.badge{display:inline-block;font-size:11px;font-weight:600;padding:2px 8px;border-radius:99px;margin-left:6px;white-space:nowrap;}
+.badge.retired{background:var(--warning-bg);color:var(--warning);}
+.badge.exact{background:var(--success-bg);color:var(--success);}
+.none{color:var(--muted);font-size:0.9em;}
+
+.field{margin-bottom:16px;}
+.field:last-child{margin-bottom:0;}
+label{display:block;font-size:13px;font-weight:600;color:var(--ink);margin:0 0 6px;}
+label .optional-tag{font-weight:400;color:var(--faint);}
+input[type=text]{
+  width:100%;font-family:var(--sans);font-size:14px;color:var(--ink);
+  background:var(--field);border:1px solid var(--border);border-radius:var(--radius-sm);
+  padding:9px 12px;transition:border-color .15s,box-shadow .15s;
+}
+input::placeholder{color:var(--faint);}
+input:focus{outline:none;border-color:var(--link);box-shadow:0 0 0 3px rgba(88,166,255,.15);}
+
+.btn{appearance:none;border:none;background:var(--accent);color:#fff;font-family:var(--sans);
+  font-size:14px;font-weight:600;padding:10px 18px;border-radius:var(--radius-sm);cursor:pointer;transition:background .15s;}
+.btn:hover{background:var(--accent-hover);}
+.btn:active{background:var(--accent-active);}
+.btn:focus-visible{outline:2px solid var(--link);outline-offset:2px;}
+.btn-row{margin-top:16px;}
+
+#quickResult{margin-top:16px;}
+#quickResult .flag-card{margin-bottom:10px;}
+
+.tools-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;}
+.tool-card{display:flex;flex-direction:column;gap:3px;background:var(--card);border:1px solid var(--border);
+  border-radius:12px;padding:14px 16px;text-decoration:none;color:var(--ink);
+  transition:border-color .15s,box-shadow .15s,transform .15s;}
+.tool-card:hover{border-color:var(--accent);box-shadow:0 2px 8px rgba(47,111,78,.12);transform:translateY(-1px);}
+.tool-card-name{font-size:13.5px;font-weight:700;color:var(--accent);}
+.tool-card-name::after{content:" \2197";font-weight:600;}
+.tool-card-desc{font-size:12px;color:var(--muted);}
+footer.tools-nav{margin-top:40px;padding-top:20px;border-top:1px solid var(--border);}
+footer.tools-nav .label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--faint);margin-bottom:12px;}
+@media (max-width:480px){
+  .wrap{padding:28px 16px 48px;}
+  h1{font-size:21px;}
+  .btn-row .btn{width:100%;text-align:center;}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Entity Name Matcher</h1>
+  <p class="lede">Scans all accounts for reused PII — matching names, emails, phones,
+    or addresses, including a new account's contact info matching contact info an existing
+    account no longer uses (a prior email or phone number it has since changed away from).</p>
+
+  <h2 class="section">All Accounts</h2>
+  <div class="card">
+    <div class="table-wrap">
+      <table id="accountsTable">
+        <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Address</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <h2 class="section">Flagged Matches</h2>
+  <div class="card">
+    <div id="flags"></div>
+  </div>
+
+  <h2 class="section">Check Another Name or Contact Set</h2>
+  <p class="section-note">Compare a new name/email/phone/address against every account loaded above.</p>
+  <div class="card">
+    <div class="field">
+      <label for="qName">Name</label>
+      <input type="text" id="qName" placeholder="e.g. Janet Doe">
+    </div>
+    <div class="field">
+      <label for="qEmail">Email <span class="optional-tag">(optional)</span></label>
+      <input type="text" id="qEmail" placeholder="e.g. jane.doe@example.com">
+    </div>
+    <div class="field">
+      <label for="qPhone">Phone <span class="optional-tag">(optional)</span></label>
+      <input type="text" id="qPhone" placeholder="e.g. (415) 555-0148">
+    </div>
+    <div class="field">
+      <label for="qAddress">Address <span class="optional-tag">(optional)</span></label>
+      <input type="text" id="qAddress" placeholder="e.g. 42 Bayview Ter, San Francisco, CA">
+    </div>
+    <div class="btn-row">
+      <button class="btn" onclick="runQuickCheck()">Check Against Case</button>
+    </div>
+    <div id="quickResult"></div>
+  </div>
+
+  <footer class="tools-nav">
+    <div class="label">More tools</div>
+    <div class="tools-grid">
+    <a class="tool-card" href="https://biancabcarlson.github.io/Case-Calculator/" target="_blank" rel="noopener">
+      <span class="tool-card-name">Case Calculator</span>
+      <span class="tool-card-desc">Check the withdrawal/exposure math</span>
+    </a>
+    <a class="tool-card" href="https://biancabcarlson.github.io/Report-Template-Filler/" target="_blank" rel="noopener">
+      <span class="tool-card-name">Report Template Filler</span>
+      <span class="tool-card-desc">Write up the findings</span>
+    </a>
+    <a class="tool-card" href="https://biancabcarlson.github.io/OSINT-Tool/" target="_blank" rel="noopener">
+      <span class="tool-card-name">OSINT Tool</span>
+      <span class="tool-card-desc">Look up the new payee / beneficiary name</span>
+    </a>
+    <a class="tool-card" href="https://biancabcarlson.github.io/Case-Doc-Tracker/" target="_blank" rel="noopener">
+      <span class="tool-card-name">Case Doc Tracker</span>
+      <span class="tool-card-desc">Track what's still needed for this case</span>
+    </a>
+    <a class="tool-card" href="https://biancabcarlson.github.io/Case-Timeline-Builder/" target="_blank" rel="noopener">
+      <span class="tool-card-name">Case Timeline Builder</span>
+      <span class="tool-card-desc">Timeline the account events</span>
+    </a>
+    </div>
+  </footer>
+
+</div>
+
+<script>
+/* ---------------------------------------------------------------------
+   Ported from entity_name_matcher.py -- see that file for the reference
+   implementation and CLI. This mirrors score_names()/find_pii_collisions()
+   closely enough for this demo; the similarity ratio is an approximation
+   of difflib.SequenceMatcher, not a byte-for-byte port.
+--------------------------------------------------------------------- */
+
+const NICKNAMES = {
+  bob:"robert", bobby:"robert", rob:"robert", robbie:"robert",
+  bill:"william", billy:"william", will:"william", willy:"william", liam:"william",
+  dick:"richard", rich:"richard", richie:"richard", rick:"richard", ricky:"richard",
+  jim:"james", jimmy:"james", jamie:"james",
+  jack:"john", johnny:"john", jon:"john", jonny:"john",
+  mike:"michael", mikey:"michael", mick:"michael", micky:"michael",
+  dave:"david", davey:"david",
+  matt:"matthew", matty:"matthew",
+  chris:"christopher", topher:"christopher",
+  nick:"nicholas", nicky:"nicholas", nico:"nicholas",
+  andy:"andrew", drew:"andrew",
+  tony:"anthony", ant:"anthony",
+  steve:"steven", stevie:"steven",
+  joe:"joseph", joey:"joseph",
+  sam:"samuel", sammy:"samuel",
+  ben:"benjamin", benny:"benjamin",
+  alex:"alexander", al:"alexander",
+  ed:"edward", eddie:"edward", ted:"edward", teddy:"edward", ned:"edward",
+  greg:"gregory",
+  ken:"kenneth", kenny:"kenneth",
+  larry:"lawrence", laurie:"lawrence",
+  pat:"patrick", paddy:"patrick",
+  tom:"thomas", tommy:"thomas",
+  dan:"daniel", danny:"daniel",
+  frank:"francis", frankie:"francis",
+  gerry:"gerald", jerry:"gerald",
+  hank:"henry", harry:"henry",
+  peggy:"margaret", meg:"margaret", maggie:"margaret", marge:"margaret", greta:"margaret",
+  liz:"elizabeth", beth:"elizabeth", betty:"elizabeth", eliza:"elizabeth", libby:"elizabeth", lisa:"elizabeth",
+  kate:"katherine", katie:"katherine", kathy:"katherine", kit:"katherine", cathy:"catherine",
+  sue:"susan", susie:"susan", suzy:"susan",
+  jen:"jennifer", jenny:"jennifer",
+  cindy:"cynthia",
+  deb:"deborah", debbie:"deborah",
+  barb:"barbara", barbie:"barbara",
+  peg:"margaret", pam:"pamela",
+  vicky:"victoria", vic:"victoria",
+  trish:"patricia", patty:"patricia", tricia:"patricia",
+  sandy:"sandra", abby:"abigail",
+  ginny:"virginia", ginger:"virginia",
+  connie:"constance",
+  franny:"frances", fanny:"frances",
+  gina:"regina",
+  nancy:"ann", annie:"ann", nan:"ann",
+  ronnie:"ronald", ron:"ronald",
+  wally:"walter", walt:"walter",
+  phil:"philip", vince:"vincent", les:"leslie",
+  janet:"jane", jan:"jane", jani:"jane",
+};
+
+const GENERATIONAL_SUFFIXES = new Set(["jr","sr","ii","iii","iv","v"]);
+const WEIGHTS = { tokenSort: 0.30, tokenSet: 0.25, pairwise: 0.45 };
+const THRESHOLDS = [[85,"match"],[70,"likely match"],[50,"possible match"],[0,"no match"]];
+
+function stripAccents(text) {
+  return text.normalize("NFKD").replace(/[\u0300-\u036f]/g, "");
+}
+
+function tokenize(name) {
+  const folded = stripAccents(name || "").toLowerCase();
+  const cleaned = folded.replace(/[^a-z0-9\s]/g, " ");
+  return cleaned.split(/\s+/).filter(t => t && !GENERATIONAL_SUFFIXES.has(t));
+}
+
+function canon(token) { return NICKNAMES[token] || token; }
+
+// Approximate string similarity ratio (0-1), same spirit as difflib's
+// SequenceMatcher.ratio(): based on longest common subsequence length.
+function ratio(a, b) {
+  if (!a && !b) return 1;
+  if (!a || !b) return 0;
+  const m = a.length, n = b.length;
+  const dp = Array.from({length: m + 1}, () => new Uint16Array(n + 1));
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      dp[i][j] = a[i-1] === b[j-1] ? dp[i-1][j-1] + 1 : Math.max(dp[i-1][j], dp[i][j-1]);
+    }
+  }
+  const lcs = dp[m][n];
+  return (2 * lcs) / (m + n);
+}
+
+function tokenSortScore(a, b) {
+  const sa = [...a].sort().join(" ");
+  const sb = [...b].sort().join(" ");
+  return ratio(sa, sb) * 100;
+}
+
+function tokenSetScore(a, b) {
+  const setA = new Set(a.map(canon)), setB = new Set(b.map(canon));
+  if (!setA.size || !setB.size) return 0;
+  const inter = [...setA].filter(x => setB.has(x)).length;
+  const union = new Set([...setA, ...setB]).size;
+  return (inter / union) * 100;
+}
+
+function bestPairwiseScore(a, b) {
+  if (!a.length || !b.length) return 0;
+  const [short, long_] = a.length <= b.length ? [a, b] : [b, a];
+  const remaining = [...long_];
+  const scores = [];
+  for (const tok of short) {
+    const ct = canon(tok);
+    let best = 0, bestIdx = -1;
+    remaining.forEach((cand, idx) => {
+      const cc = canon(cand);
+      let s;
+      if (tok.length === 1 || cand.length === 1) s = ct[0] === cc[0] ? 100 : 0;
+      else if (ct === cc) s = 100;
+      else s = ratio(ct, cc) * 100;
+      if (s > best) { best = s; bestIdx = idx; }
+    });
+    scores.push(best);
+    if (bestIdx >= 0 && best > 0) remaining.splice(bestIdx, 1);
+  }
+  return scores.reduce((s, v) => s + v, 0) / scores.length;
+}
+
+function verdictFor(score) {
+  for (const [cutoff, label] of THRESHOLDS) if (score >= cutoff) return label;
+  return "no match";
+}
+
+function scoreNames(nameA, nameB) {
+  const ta = tokenize(nameA), tb = tokenize(nameB);
+  const components = {
+    tokenSort: tokenSortScore(ta, tb),
+    tokenSet: tokenSetScore(ta, tb),
+    pairwise: bestPairwiseScore(ta, tb),
+  };
+  let final = 0;
+  for (const k in WEIGHTS) final += components[k] * WEIGHTS[k];
+  final = Math.round(Math.min(final, 100) * 10) / 10;
+  return { score: final, verdict: verdictFor(final), components };
+}
+
+function normalizeEmail(e) { return (e || "").trim().toLowerCase(); }
+function normalizePhone(p) {
+  let digits = (p || "").replace(/\D/g, "");
+  if (digits.length === 11 && digits[0] === "1") digits = digits.slice(1);
+  return digits;
+}
+function normalizeAddress(a) {
+  return stripAccents(a || "").toLowerCase().replace(/[^\w\s]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function compareAccounts(a, b) {
+  const nameResult = scoreNames(a.name, b.name);
+  const fieldMatches = [];
+  const reasons = [];
+
+  if (a.email && b.email && normalizeEmail(a.email) === normalizeEmail(b.email)) {
+    fieldMatches.push({ field: "email", type: "exact" });
+    reasons.push(`same email (${a.email})`);
+  }
+  if (a.phone && b.phone && normalizePhone(a.phone) === normalizePhone(b.phone)) {
+    fieldMatches.push({ field: "phone", type: "exact" });
+    reasons.push(`same phone (${a.phone})`);
+  }
+  if (a.address && b.address && normalizeAddress(a.address) === normalizeAddress(b.address)) {
+    fieldMatches.push({ field: "address", type: "exact" });
+    reasons.push(`same address (${a.address})`);
+  }
+
+  const priorEmailsA = (a.priorEmails || []).map(normalizeEmail);
+  const priorEmailsB = (b.priorEmails || []).map(normalizeEmail);
+  const priorPhonesA = (a.priorPhones || []).map(normalizePhone);
+  const priorPhonesB = (b.priorPhones || []).map(normalizePhone);
+
+  if (b.email && priorEmailsA.includes(normalizeEmail(b.email))) {
+    fieldMatches.push({ field: "email", type: "retired" });
+    reasons.push(`${b.name}'s email matches an email ${a.name} no longer uses (${b.email})`);
+  }
+  if (a.email && priorEmailsB.includes(normalizeEmail(a.email))) {
+    fieldMatches.push({ field: "email", type: "retired" });
+    reasons.push(`${a.name}'s email matches an email ${b.name} no longer uses (${a.email})`);
+  }
+  if (b.phone && priorPhonesA.includes(normalizePhone(b.phone))) {
+    fieldMatches.push({ field: "phone", type: "retired" });
+    reasons.push(`${b.name}'s phone matches a phone ${a.name} no longer uses (${b.phone})`);
+  }
+  if (a.phone && priorPhonesB.includes(normalizePhone(a.phone))) {
+    fieldMatches.push({ field: "phone", type: "retired" });
+    reasons.push(`${a.name}'s phone matches a phone ${b.name} no longer uses (${a.phone})`);
+  }
+
+  if (nameResult.score >= 70) reasons.push(`name ${nameResult.verdict} (${nameResult.score}/100)`);
+
+  return {
+    accountA: a, accountB: b,
+    nameScore: nameResult.score, nameVerdict: nameResult.verdict,
+    fieldMatches, reasons,
+    flagged: fieldMatches.length > 0 || nameResult.score >= 70,
+  };
+}
+
+function findPiiCollisions(accounts) {
+  const flagged = [];
+  for (let i = 0; i < accounts.length; i++) {
+    for (let j = i + 1; j < accounts.length; j++) {
+      const c = compareAccounts(accounts[i], accounts[j]);
+      if (c.flagged) flagged.push(c);
+    }
+  }
+  return flagged;
+}
+
+/* ---------------------------------------------------------------------
+   All accounts -- pulled from the simulated-account fixture
+   (account-data.json + account-data-2.json / relatedAccounts). Retired
+   contact info comes from account-data.json's activityLog (email_changed,
+   phone_updated events).
+--------------------------------------------------------------------- */
+const ACCOUNTS = [
+  {
+    name: "Jane Doe",
+    email: "jane.doe@example.com",
+    phone: "(415) 555-0148",
+    address: "42 Bayview Ter, San Francisco, CA",
+    priorEmails: ["j.doe88@example.com"],
+    priorPhones: ["(415) 555-0119"],
+  },
+  {
+    name: "Janet R. Doe",
+    email: "j.doe88@example.com",
+    phone: "(415) 555-0119",
+    address: "42 Bayview Ter, San Francisco, CA",
+    priorEmails: [],
+    priorPhones: [],
+  },
+];
+
+function renderAccountsTable() {
+  const tbody = document.querySelector("#accountsTable tbody");
+
+  if (!ACCOUNTS.length) {
+    tbody.innerHTML = `<tr><td colspan="4" class="empty-state">No accounts loaded.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = ACCOUNTS.map(a => `
+    <tr>
+      <td>${a.name}</td>
+      <td>${a.email}</td>
+      <td>${a.phone}</td>
+      <td>${a.address}</td>
+    </tr>
+  `).join("");
+}
+
+function renderFlags() {
+  const collisions = findPiiCollisions(ACCOUNTS);
+  const container = document.getElementById("flags");
+
+  if (!collisions.length) {
+    container.innerHTML = `<p class="none">No PII overlap found across the loaded accounts.</p>`;
+    return;
+  }
+
+  container.innerHTML = collisions.map(c => {
+    const high = c.fieldMatches.some(m => m.type === "exact" || m.type === "retired");
+    const badges = c.fieldMatches.map(m =>
+      `<span class="badge ${m.type}">${m.field}${m.type === "retired" ? " · prior" : ""}</span>`
+    ).join("");
+    return `
+      <div class="flag-card ${high ? "high" : ""}">
+        <span class="flag-title">${c.accountA.name} ↔ ${c.accountB.name}</span>
+        <span class="flag-score">name ${c.nameScore}/100 (${c.nameVerdict})</span>
+        ${badges}
+        <ul class="flag-reasons">
+          ${c.reasons.map(r => `<li>${r}</li>`).join("")}
+        </ul>
+      </div>
+    `;
+  }).join("");
+}
+
+function runQuickCheck() {
+  const query = {
+    name: document.getElementById("qName").value.trim(),
+    email: document.getElementById("qEmail").value.trim(),
+    phone: document.getElementById("qPhone").value.trim(),
+    address: document.getElementById("qAddress").value.trim(),
+  };
+  const box = document.getElementById("quickResult");
+
+  if (!query.name) {
+    box.innerHTML = `<p class="none">Enter at least a name to check.</p>`;
+    return;
+  }
+
+  const results = ACCOUNTS.map(a => compareAccounts(query, a)).filter(c => c.flagged);
+
+  if (!results.length) {
+    box.innerHTML = `<p class="none">No overlap with any account.</p>`;
+    return;
+  }
+
+  box.innerHTML = results.map(c => {
+    const badges = c.fieldMatches.map(m =>
+      `<span class="badge ${m.type}">${m.field}${m.type === "retired" ? " · prior" : ""}</span>`
+    ).join("");
+    return `
+      <div class="flag-card">
+        <span class="flag-title">${query.name} ↔ ${c.accountB.name}</span>
+        <span class="flag-score">name ${c.nameScore}/100 (${c.nameVerdict})</span>
+        ${badges}
+        <ul class="flag-reasons">${c.reasons.map(r => `<li>${r}</li>`).join("")}</ul>
+      </div>
+    `;
+  }).join("");
+}
+
+renderAccountsTable();
+renderFlags();
+</script>
+
+</body>
+</html>
